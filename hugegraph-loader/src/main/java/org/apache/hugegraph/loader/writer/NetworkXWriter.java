@@ -40,71 +40,87 @@ public class NetworkXWriter implements Writer {
         }  
     }  
       
-    @Override  
-    public void writeNodes(List<Record> records) {  
-        for (Record record : records) {  
-            Vertex vertex = (Vertex) record.element();  
-            String label = vertex.label();  
-            String originalId = preprocessId(vertex.id().toString());  
-              
-            int nodeId = getOrCreateNodeId(originalId);  
-              
-            Map<String, Object> nodeData = new HashMap<>();  
-            nodeData.put("id", nodeId);  
-            nodeData.put("original_id", originalId);  
-            nodeData.put("label", label.toLowerCase());  
-              
-            Map<String, Object> properties = vertex.properties();  
-            if (properties != null) {  
-                for (Map.Entry<String, Object> prop : properties.entrySet()) {  
-                    if (!prop.getKey().equals("id")) {  
-                        nodeData.put(prop.getKey(), prop.getValue());  
-                    }  
-                }  
-            }  
-              
-            nodes.add(nodeData);  
-            nodeCounters.merge(label, 1, Integer::sum);  
-        }  
+    @Override
+    public void writeNodes(List<Record> records) {
+        for (Record record : records) {
+            Vertex vertex = (Vertex) record.element();
+            String label = vertex.label();
+            String originalId = preprocessId(vertex.id().toString());
+
+            int nodeId = getOrCreateNodeId(originalId);
+
+            Map<String, Object> nodeData = new HashMap<>();
+            nodeData.put("id", nodeId);
+
+            // Add user properties first (from CSV)
+            Map<String, Object> properties = vertex.properties();
+            if (properties != null) {
+                for (Map.Entry<String, Object> prop : properties.entrySet()) {
+                    if (!prop.getKey().equals("id")) {
+                        nodeData.put(prop.getKey(), prop.getValue());
+                    }
+                }
+            }
+
+            // Only add node_type if user didn't provide a "label" property
+            if (!nodeData.containsKey("label")) {
+                nodeData.put("node_type", label.toLowerCase());
+            }
+
+            // Only add original_id if user didn't provide any entity-specific ID
+            boolean hasCustomId = properties != null && properties.keySet().stream()
+                .anyMatch(key -> key.toLowerCase().endsWith("_id") || key.toLowerCase().equals("id"));
+            if (!hasCustomId) {
+                nodeData.put("original_id", originalId);
+            }
+
+            nodes.add(nodeData);
+            nodeCounters.merge(label, 1, Integer::sum);
+        }
     }  
       
-    @Override  
-    public void writeEdges(List<Record> records) {  
-        for (Record record : records) {  
-            Edge edge = (Edge) record.element();  
-            String label = edge.label().toLowerCase();  
-            String sourceId = preprocessId(edge.sourceId().toString());  
-            String targetId = preprocessId(edge.targetId().toString());  
-              
-            Integer sourceNodeId = nodeMapping.get(sourceId);  
-            Integer targetNodeId = nodeMapping.get(targetId);  
-              
-            if (sourceNodeId == null || targetNodeId == null) {  
-                System.err.println("Warning: Skipping edge - node not found. Source: " +   
-                    sourceId + ", Target: " + targetId);  
-                continue;  
-            }  
-              
-            Map<String, Object> edgeData = new HashMap<>();  
-            edgeData.put("source", sourceNodeId);  
-            edgeData.put("target", targetNodeId);  
-            edgeData.put("type", label);  
-            edgeData.put("source_label", edge.sourceLabel());  
-            edgeData.put("target_label", edge.targetLabel());  
-              
-            Map<String, Object> properties = edge.properties();  
-            if (properties != null) {  
-                for (Map.Entry<String, Object> prop : properties.entrySet()) {  
-                    if (!prop.getKey().equals("id")) {  
-                        edgeData.put(prop.getKey(), prop.getValue());  
-                    }  
-                }  
-            }  
-              
-            edges.add(edgeData);  
-            String edgeKey = label + "|" + edge.sourceLabel() + "|" + edge.targetLabel();  
-            edgeCounters.merge(edgeKey, 1, Integer::sum);  
-        }  
+    @Override
+    public void writeEdges(List<Record> records) {
+        for (Record record : records) {
+            Edge edge = (Edge) record.element();
+            String label = edge.label().toLowerCase();
+            String sourceId = preprocessId(edge.sourceId().toString());
+            String targetId = preprocessId(edge.targetId().toString());
+
+            Integer sourceNodeId = nodeMapping.get(sourceId);
+            Integer targetNodeId = nodeMapping.get(targetId);
+
+            if (sourceNodeId == null || targetNodeId == null) {
+                System.err.println("Warning: Skipping edge - node not found. Source: " +
+                    sourceId + ", Target: " + targetId);
+                continue;
+            }
+
+            Map<String, Object> edgeData = new HashMap<>();
+            edgeData.put("source", sourceNodeId);
+            edgeData.put("target", targetNodeId);
+            edgeData.put("source_label", edge.sourceLabel());
+            edgeData.put("target_label", edge.targetLabel());
+
+            // Add user properties first (from CSV)
+            Map<String, Object> properties = edge.properties();
+            if (properties != null) {
+                for (Map.Entry<String, Object> prop : properties.entrySet()) {
+                    if (!prop.getKey().equals("id")) {
+                        edgeData.put(prop.getKey(), prop.getValue());
+                    }
+                }
+            }
+
+            // Only add edge_label if user didn't provide a "type" property
+            if (!edgeData.containsKey("type")) {
+                edgeData.put("edge_label", label);
+            }
+
+            edges.add(edgeData);
+            String edgeKey = label + "|" + edge.sourceLabel() + "|" + edge.targetLabel();
+            edgeCounters.merge(edgeKey, 1, Integer::sum);
+        }
     }  
       
     public void writeGraph() throws IOException {  
