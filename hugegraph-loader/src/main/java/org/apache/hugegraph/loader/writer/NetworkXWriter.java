@@ -62,8 +62,10 @@ public class NetworkXWriter implements Writer {
                 }
             }
 
-            // Only add node_type if user didn't provide a "label" property
-            if (!nodeData.containsKey("label")) {
+            // Store vertex schema label as "type" for visualizer compatibility.
+            // Also keep "node_type" as a fallback for backward compatibility.
+            if (!nodeData.containsKey("type") && !nodeData.containsKey("label")) {
+                nodeData.put("type", label);
                 nodeData.put("node_type", label.toLowerCase());
             }
 
